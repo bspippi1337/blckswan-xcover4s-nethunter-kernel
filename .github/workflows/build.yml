@@ -1,0 +1,67 @@
+name: Build BLCKSWAN XCover4S NetHunter Kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install deps
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git bc bison flex make gcc g++ \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            libssl-dev libelf-dev libncurses-dev \
+            zip unzip cpio python3
+
+      - name: Build kernel
+        run: |
+          bash scripts/patch-and-build.sh
+
+      - name: Pack AnyKernel3 flash zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
+          cp dist/Image.gz-dtb ak3/Image.gz-dtb
+          cd ak3
+          rm -rf .git README.md LICENSE
+          cat > anykernel.sh <<'AK'
+          properties() { '
+          kernel.string=BLCKSWAN XCover4S NetHunter Kernel 1337
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=xcover4s
+          device.name2=SM-G398FN
+          device.name3=G398FN
+          '; }
+
+          block=auto
+          is_slot_device=auto
+          ramdisk_compression=auto
+          patch_vbmeta_flag=auto
+
+          . tools/ak3-core.sh
+          dump_boot
+          write_boot
+          AK
+          zip -r9 ../BLCKSWAN-XCover4S-NetHunter-kernel-1337.zip . -x '*.git*'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: blckswan-xcover4s-nethunter-kernel
+          path: |
+            dist/Image.gz-dtb
+            BLCKSWAN-XCover4S-NetHunter-kernel-1337.zip
